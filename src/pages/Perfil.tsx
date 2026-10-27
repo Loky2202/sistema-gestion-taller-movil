@@ -10,10 +10,11 @@ import { runTests } from '../tests';
 export default function Perfil() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const alertas = useMemo(() => getAlertas().filter(a => !a.leida), []);
-  const usuarios = useMemo(() => getUsuarios(), []);
-  const [, setRefresh] = useState(0);
+  const [refresh, setRefresh] = useState(0);
   const [testResults, setTestResults] = useState<{ passed: number; failed: number } | null>(null);
+
+  const alertas = useMemo(() => getAlertas().filter(a => !a.leida), [refresh]);
+  const usuarios = useMemo(() => getUsuarios(), [refresh]);
 
   const handleRunTests = () => {
     const results = runTests();

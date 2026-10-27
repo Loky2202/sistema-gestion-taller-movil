@@ -14,7 +14,6 @@ export default function Clientes() {
   const [telefono, setTelefono] = useState('');
   const [email, setEmail] = useState('');
   const [selectedCliente, setSelectedCliente] = useState<string | null>(null);
-  const [, setRefresh] = useState(0);
 
   // Nuevo vehículo
   const [showNuevoVeh, setShowNuevoVeh] = useState(false);
@@ -25,30 +24,43 @@ export default function Clientes() {
   const [anio, setAnio] = useState('2023');
   const [color, setColor] = useState('');
 
+  const [refresh, setRefresh] = useState(0);
+
   const clientes = useMemo(() => {
     const all = getClientes();
     if (!busqueda) return all;
     const q = busqueda.toLowerCase();
     return all.filter(c => c.nombre.toLowerCase().includes(q) || c.telefono.includes(q));
-  }, [busqueda]);
+  }, [busqueda, refresh]);
+
+  const [errorCliente, setErrorCliente] = useState('');
+  const [errorVehiculo, setErrorVehiculo] = useState('');
 
   const handleCrearCliente = () => {
-    if (!nombre || !telefono) { alert('Nombre y teléfono son obligatorios'); return; }
-    crearCliente({ nombre, telefono, email: email || undefined });
-    setNombre(''); setTelefono(''); setEmail('');
-    setShowNuevo(false);
-    setRefresh(r => r + 1);
+    setErrorCliente('');
+    if (!nombre || !telefono) { setErrorCliente('Nombre y teléfono son obligatorios'); return; }
+    try {
+      crearCliente({ nombre, telefono, email: email || undefined });
+      setNombre(''); setTelefono(''); setEmail('');
+      setShowNuevo(false);
+      setRefresh(r => r + 1);
+    } catch (e: any) {
+      setErrorCliente(e.message);
+    }
   };
 
   const handleCrearVehiculo = () => {
-    if (!placa || !marca || !selectedCliente) { alert('Complete los campos'); return; }
-    crearVehiculo({ placa: placa.toUpperCase(), tipo, marca, modelo, anio: parseInt(anio) || 2023, color, cliente_id: selectedCliente });
-    setPlaca(''); setMarca(''); setModelo(''); setColor('');
-    setShowNuevoVeh(false);
-    setRefresh(r => r + 1);
+    setErrorVehiculo('');
+    if (!placa || !marca || !selectedCliente) { setErrorVehiculo('Complete los campos'); return; }
+    try {
+      crearVehiculo({ placa: placa.toUpperCase(), tipo, marca, modelo, anio: parseInt(anio) || 2023, color, cliente_id: selectedCliente });
+      setPlaca(''); setMarca(''); setModelo(''); setColor('');
+      setShowNuevoVeh(false);
+      setRefresh(r => r + 1);
+    } catch (e: any) {
+      setErrorVehiculo(e.message);
+    }
   };
-
-  const vehiculosCliente = selectedCliente ? getVehiculosByCliente(selectedCliente) : [];
 
   return (
     <div className="pb-20">
@@ -140,17 +152,22 @@ export default function Clientes() {
       </div>
 
       {/* Modal Nuevo Cliente */}
-      <Modal isOpen={showNuevo} onClose={() => setShowNuevo(false)} title="Nuevo Cliente">
+      <Modal isOpen={showNuevo} onClose={() => { setShowNuevo(false); setErrorCliente(''); }} title="Nuevo Cliente">
         <div className="space-y-3">
           <Input label="Nombre completo *" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Ej: María García" />
           <Input label="Teléfono *" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="3001234567" type="tel" />
           <Input label="Email (opcional)" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@ejemplo.com" type="email" />
+          {errorCliente && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl text-center font-medium">
+              {errorCliente}
+            </div>
+          )}
           <Button fullWidth onClick={handleCrearCliente}>Guardar Cliente</Button>
         </div>
       </Modal>
 
       {/* Modal Nuevo Vehículo */}
-      <Modal isOpen={showNuevoVeh} onClose={() => setShowNuevoVeh(false)} title="Nuevo Vehículo">
+      <Modal isOpen={showNuevoVeh} onClose={() => { setShowNuevoVeh(false); setErrorVehiculo(''); }} title="Nuevo Vehículo">
         <div className="space-y-3">
           <Input label="Placa *" value={placa} onChange={e => setPlaca(e.target.value)} placeholder="ABC123" />
           <select className="w-full px-4 py-3 rounded-xl border border-gray-200 text-base" value={tipo} onChange={e => setTipo(e.target.value as 'moto' | 'carro')}>
@@ -161,6 +178,11 @@ export default function Clientes() {
           <Input label="Modelo" value={modelo} onChange={e => setModelo(e.target.value)} placeholder="Ej: MT-07" />
           <Input label="Año" value={anio} onChange={e => setAnio(e.target.value)} type="number" />
           <Input label="Color" value={color} onChange={e => setColor(e.target.value)} placeholder="Negro" />
+          {errorVehiculo && (
+            <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl text-center font-medium">
+              {errorVehiculo}
+            </div>
+          )}
           <Button fullWidth onClick={handleCrearVehiculo}>Guardar Vehículo</Button>
         </div>
       </Modal>

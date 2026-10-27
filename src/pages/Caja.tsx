@@ -8,20 +8,32 @@ import { useAuth } from '../store/auth';
 export default function Caja() {
   const user = useAuth(s => s.user);
   const [showConfirmCierre, setShowConfirmCierre] = useState(false);
-  const [, setRefresh] = useState(0);
+  const [refresh, setRefresh] = useState(0);
 
-  const resumen = useMemo(() => getResumenHoy(), []);
-  const cierres = useMemo(() => getCierres(), []);
+  const resumen = useMemo(() => getResumenHoy(), [refresh]);
+  const cierres = useMemo(() => getCierres(), [refresh]);
   const ordenesHoy = useMemo(() => {
     const hoy = new Date().toISOString().split('T')[0];
     return getOrdenes().filter(o => o.estado === 'entregado' && o.fecha_entrega?.startsWith(hoy));
-  }, []);
+  }, [refresh]);
+
+  const [errorCierre, setErrorCierre] = useState('');
+  const [successCierre, setSuccessCierre] = useState('');
 
   const handleCierre = () => {
+    setErrorCierre('');
+    // Verificar si ya hay un cierre hoy
+    const hoy = new Date().toISOString().split('T')[0];
+    const cierreHoy = cierres.find(c => c.fecha === hoy);
+    if (cierreHoy) {
+      setErrorCierre('Ya se realizó un cierre de caja hoy. Solo se permite un cierre por día.');
+      return;
+    }
     cerrarCaja(user!.id);
     setShowConfirmCierre(false);
+    setSuccessCierre('Caja cerrada exitosamente');
     setRefresh(r => r + 1);
-    alert('Caja cerrada exitosamente');
+    setTimeout(() => setSuccessCierre(''), 3000);
   };
 
   return (
@@ -123,18 +135,30 @@ export default function Caja() {
         )}
       </div>
 
+      {/* Mensajes de éxito/error */}
+      {successCierre && (
+        <div className="mx-4 bg-green-50 text-green-700 p-3 rounded-xl text-sm font-medium text-center">
+          ✓ {successCierre}
+        </div>
+      )}
+
       {/* Modal confirmación cierre */}
       {showConfirmCierre && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowConfirmCierre(false)} />
+          <div className="fixed inset-0 bg-black/50" onClick={() => { setShowConfirmCierre(false); setErrorCierre(''); }} />
           <div className="relative bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
             <h3 className="text-lg font-bold text-center">¿Cerrar caja del día?</h3>
             <div className="bg-green-50 p-4 rounded-xl text-center">
               <p className="text-sm text-gray-600">Total del día</p>
               <p className="text-2xl font-bold text-green-700">{formatCurrency(resumen.total_general)}</p>
             </div>
+            {errorCierre && (
+              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl text-center font-medium">
+                {errorCierre}
+              </div>
+            )}
             <div className="flex gap-3">
-              <Button variant="secondary" onClick={() => setShowConfirmCierre(false)} className="flex-1">Cancelar</Button>
+              <Button variant="secondary" onClick={() => { setShowConfirmCierre(false); setErrorCierre(''); }} className="flex-1">Cancelar</Button>
               <Button variant="danger" onClick={handleCierre} className="flex-1">Confirmar</Button>
             </div>
           </div>

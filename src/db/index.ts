@@ -149,6 +149,11 @@ export function getCliente(id: string): Cliente | null {
 
 export function crearCliente(data: Omit<Cliente, 'id' | 'created_at'>): Cliente {
   const db = getDB();
+  // Validar teléfono único
+  const existe = db.clientes.find(c => c.telefono === data.telefono);
+  if (existe) {
+    throw new Error(`Ya existe un cliente con el teléfono ${data.telefono}`);
+  }
   const cliente: Cliente = { ...data, id: uuidv4(), created_at: new Date().toISOString() };
   db.clientes.push(cliente);
   saveDB(db);
@@ -187,6 +192,11 @@ export function buscarVehiculos(query: string): Vehiculo[] {
 
 export function crearVehiculo(data: Omit<Vehiculo, 'id' | 'created_at'>): Vehiculo {
   const db = getDB();
+  // Validar placa única
+  const existe = db.vehiculos.find(v => v.placa === data.placa);
+  if (existe) {
+    throw new Error(`Ya existe un vehículo con la placa ${data.placa}`);
+  }
   const vehiculo: Vehiculo = { ...data, id: uuidv4(), created_at: new Date().toISOString() };
   db.vehiculos.push(vehiculo);
   saveDB(db);

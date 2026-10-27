@@ -48,11 +48,12 @@ export default function OrdenDetalle() {
     setError('');
     try {
       actualizarOrdenEstado(orden.id, nuevoEstado, user!.id);
-      setSuccess('Estado actualizado');
+      setSuccess('Estado actualizado correctamente');
       setShowCambiarEstado(false);
       setRefresh(r => r + 1);
-      setTimeout(() => setSuccess(''), 2000);
+      setTimeout(() => setSuccess(''), 3000);
     } catch (e: any) {
+      // No cerrar el modal si hay error, mostrar el mensaje dentro
       setError(e.message);
     }
   };
@@ -75,9 +76,16 @@ export default function OrdenDetalle() {
     }
   };
 
+  const [itemAEliminar, setItemAEliminar] = useState<string | null>(null);
+
   const handleEliminarItem = (itemId: string) => {
-    if (confirm('¿Eliminar este ítem?')) {
-      eliminarItemOrden(orden.id, itemId);
+    setItemAEliminar(itemId);
+  };
+
+  const confirmarEliminarItem = () => {
+    if (itemAEliminar) {
+      eliminarItemOrden(orden.id, itemAEliminar);
+      setItemAEliminar(null);
       setRefresh(r => r + 1);
     }
   };
@@ -254,6 +262,15 @@ export default function OrdenDetalle() {
           <Button fullWidth onClick={handleCobrar}>
             <CreditCard className="w-5 h-5" /> Confirmar Pago
           </Button>
+        </div>
+      </Modal>
+
+      {/* Modal confirmar eliminación */}
+      <Modal isOpen={!!itemAEliminar} onClose={() => setItemAEliminar(null)} title="¿Eliminar ítem?">
+        <p className="text-gray-600">Esta acción no se puede deshacer. El ítem se eliminará de la orden.</p>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => setItemAEliminar(null)} className="flex-1">Cancelar</Button>
+          <Button variant="danger" onClick={confirmarEliminarItem} className="flex-1">Eliminar</Button>
         </div>
       </Modal>
     </div>

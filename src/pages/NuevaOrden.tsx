@@ -48,37 +48,47 @@ export default function NuevaOrden() {
 
   const total = items.reduce((s, i) => s + i.subtotal, 0);
 
+  const [errorVehiculo, setErrorVehiculo] = useState('');
+
   const handleCrearVehiculo = () => {
+    setErrorVehiculo('');
     if (!nuevoClienteNombre || !nuevoClienteTel || !nuevaPlaca || !nuevaMarca) {
-      alert('Complete los campos obligatorios');
+      setErrorVehiculo('Complete los campos obligatorios');
       return;
     }
-    const clientes = getClientes();
-    let cliente = clientes.find(c => c.telefono === nuevoClienteTel);
-    if (!cliente) {
-      cliente = crearCliente({ nombre: nuevoClienteNombre, telefono: nuevoClienteTel });
+    try {
+      const clientes = getClientes();
+      let cliente = clientes.find(c => c.telefono === nuevoClienteTel);
+      if (!cliente) {
+        cliente = crearCliente({ nombre: nuevoClienteNombre, telefono: nuevoClienteTel });
+      }
+      const vehiculo = crearVehiculo({
+        placa: nuevaPlaca.toUpperCase(),
+        tipo: nuevoTipo,
+        marca: nuevaMarca,
+        modelo: nuevoModelo,
+        anio: parseInt(nuevoAnio) || 2023,
+        color: nuevoColor,
+        cliente_id: cliente.id,
+      });
+      setVehiculoSeleccionado(vehiculo);
+      setShowNuevoVehiculo(false);
+      setStep(2);
+    } catch (e: any) {
+      setErrorVehiculo(e.message);
     }
-    const vehiculo = crearVehiculo({
-      placa: nuevaPlaca.toUpperCase(),
-      tipo: nuevoTipo,
-      marca: nuevaMarca,
-      modelo: nuevoModelo,
-      anio: parseInt(nuevoAnio) || 2023,
-      color: nuevoColor,
-      cliente_id: cliente.id,
-    });
-    setVehiculoSeleccionado(vehiculo);
-    setShowNuevoVehiculo(false);
-    setStep(2);
   };
 
+  const [errorRepuesto, setErrorRepuesto] = useState('');
+
   const handleAgregarRepuesto = (repuestoId: string) => {
+    setErrorRepuesto('');
     const repuesto = getRepuestos().find(r => r.id === repuestoId);
     if (!repuesto) return;
     const existing = items.find(i => i.repuesto_id === repuestoId);
     if (existing) {
       if (existing.cantidad >= repuesto.stock_actual) {
-        alert('No hay más stock disponible');
+        setErrorRepuesto(`Stock insuficiente de ${repuesto.nombre}. Disponible: ${repuesto.stock_actual}`);
         return;
       }
       setItems(items.map(i => i.repuesto_id === repuestoId
@@ -86,6 +96,10 @@ export default function NuevaOrden() {
         : i
       ));
     } else {
+      if (repuesto.stock_actual < 1) {
+        setErrorRepuesto(`Stock insuficiente de ${repuesto.nombre}. Disponible: ${repuesto.stock_actual}`);
+        return;
+      }
       setItems([...items, {
         tipo: 'repuesto',
         repuesto_id: repuestoId,
@@ -215,8 +229,13 @@ export default function NuevaOrden() {
                 <Input label="Modelo" placeholder="Ej: MT-07" value={nuevoModelo} onChange={e => setNuevoModelo(e.target.value)} />
                 <Input label="Año" placeholder="2023" value={nuevoAnio} onChange={e => setNuevoAnio(e.target.value)} type="number" />
                 <Input label="Color" placeholder="Negro" value={nuevoColor} onChange={e => setNuevoColor(e.target.value)} />
+                {errorVehiculo && (
+                  <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl text-center font-medium">
+                    {errorVehiculo}
+                  </div>
+                )}
                 <div className="flex gap-2 pt-2">
-                  <Button variant="secondary" onClick={() => setShowNuevoVehiculo(false)} className="flex-1">Cancelar</Button>
+                  <Button variant="secondary" onClick={() => { setShowNuevoVehiculo(false); setErrorVehiculo(''); }} className="flex-1">Cancelar</Button>
                   <Button onClick={handleCrearVehiculo} className="flex-1">Crear y Continuar</Button>
                 </div>
               </div>
@@ -327,6 +346,13 @@ export default function NuevaOrden() {
                     </div>
                   </Card>
                 ))}
+              </div>
+            )}
+
+            {/* Mensaje de error de stock */}
+            {errorRepuesto && (
+              <div className="bg-red-50 text-red-600 text-sm p-3 rounded-xl text-center font-medium">
+                {errorRepuesto}
               </div>
             )}
 
