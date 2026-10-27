@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Filter, Plus } from 'lucide-react';
-import { Card, StatusBadge, PageHeader, EmptyState, formatCurrency, formatDate } from '../components/ui';
+import { Card, StatusBadge, PageHeader, EmptyState, Loader, formatCurrency, formatDate } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
-import { getOrdenes, getVehiculo, getCliente } from '../db';
+import { getOrdenes, getVehiculos, getClientes } from '../db';
+import { useAsync, useDebounced } from '../hooks/useAsync';
 import type { EstadoOrden } from '../types';
 
 const estados: { value: EstadoOrden | ''; label: string }[] = [
@@ -21,8 +22,20 @@ export default function Ordenes() {
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const busquedaDebounced = useDebounced(busqueda, 300);
 
-  const ordenes = useMemo(() => getOrdenes(filtroEstado || undefined, busqueda || undefined), [filtroEstado, busqueda]);
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [ordenes, vehiculos, clientes] = await Promise.all([
+      getOrdenes(filtroEstado || undefined, busquedaDebounced || undefined),
+      getVehiculos(),
+      getClientes(),
+    ]);
+    return { ordenes, vehiculos, clientes };
+  }, [filtroEstado, busquedaDebounced]);
+
+  const ordenes = data?.ordenes ?? [];
+  const vehiculos = data?.vehiculos ?? [];
+  const clientes = data?.clientes ?? [];
 
   return (
     <div className="pb-20">
@@ -66,7 +79,14 @@ export default function Ordenes() {
         )}
 
         {/* Lista de órdenes */}
-        {ordenes.length === 0 ? (
+        {loading ? (
+          <Loader text="Cargando órdenes..." />
+        ) : error ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-red-600 text-sm">{error}</p>
+            <button onClick={reload} className="text-blue-600 text-sm font-medium">Reintentar</button>
+          </div>
+        ) : ordenes.length === 0 ? (
           <EmptyState
             icon={<Search className="w-8 h-8" />}
             title="No hay órdenes"
@@ -75,8 +95,8 @@ export default function Ordenes() {
         ) : (
           <div className="space-y-3">
             {ordenes.map(orden => {
-              const vehiculo = getVehiculo(orden.vehiculo_id);
-              const cliente = vehiculo ? getCliente(vehiculo.cliente_id) : null;
+              const vehiculo = vehiculos.find(v => v.id === orden.vehiculo_id);
+              const cliente = vehiculo ? clientes.find(c => c.id === vehiculo.cliente_id) : null;
               return (
                 <Card key={orden.id} onClick={() => navigate(`/ordenes/${orden.id}`)}>
                   <div className="flex items-start justify-between">

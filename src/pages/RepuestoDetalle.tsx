@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Package, Plus, Minus } from 'lucide-react';
-import { Card, Button, Input, Select, Modal, PageHeader, formatCurrency } from '../components/ui';
-import { getRepuesto, getMovimientosByRepuesto, registrarMovimiento, actualizarRepuesto } from '../db';
+import { Card, Button, Input, Select, Modal, PageHeader, Loader, formatCurrency, parseApiDate } from '../components/ui';
+import { getRepuesto, getMovimientosByRepuesto, registrarMovimiento } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync } from '../hooks/useAsync';
 
 export default function RepuestoDetalle() {
   const { id } = useParams<{ id: string }>();
@@ -13,24 +14,58 @@ export default function RepuestoDetalle() {
   const [tipoMov, setTipoMov] = useState<'entrada' | 'ajuste'>('entrada');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
 
-  const repuesto = useMemo(() => id ? getRepuesto(id) : null, [id, refresh]);
-  const movimientos = useMemo(() => id ? getMovimientosByRepuesto(id) : [], [id, refresh]);
+  const { data, loading, error: loadError, reload } = useAsync(async () => {
+    if (!id) return null;
+    const [repuesto, movimientos] = await Promise.all([
+      getRepuesto(id),
+      getMovimientosByRepuesto(id),
+    ]);
+    return repuesto ? { repuesto, movimientos } : null;
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="pb-8">
+        <PageHeader title="Detalle del Repuesto" onBack={() => navigate('/inventario')} />
+        <Loader text="Cargando repuesto..." />
+      </div>
+    );
+  }
+
+  const repuesto = data?.repuesto ?? null;
+  const movimientos = data?.movimientos ?? [];
+
+  if (loadError) {
+    return (
+      <div className="p-4 text-center space-y-4">
+        <p className="text-red-600">{loadError}</p>
+        <Button onClick={reload}>Reintentar</Button>
+      </div>
+    );
+  }
 
   if (!repuesto) {
     return <div className="p-4 text-center"><p>Repuesto no encontrado</p></div>;
   }
 
-  const handleMovimiento = () => {
+  const handleMovimiento = async () => {
     const cant = parseFloat(cantidad);
     if (isNaN(cant) || cant <= 0) { alert('Ingrese una cantidad válida'); return; }
     if (!motivo) { alert('Ingrese un motivo'); return; }
-    registrarMovimiento(repuesto.id, tipoMov, cant, motivo, user!.id);
-    setShowMovimiento(false);
-    setCantidad('');
-    setMotivo('');
-    setRefresh(r => r + 1);
+    setSaving(true);
+    try {
+      await registrarMovimiento(repuesto.id, tipoMov, cant, motivo, user?.id);
+      setShowMovimiento(false);
+      setCantidad('');
+      setMotivo('');
+      reload();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -112,7 +147,7 @@ export default function RepuestoDetalle() {
                     <p className="text-xs text-gray-500 mt-0.5">{m.motivo}</p>
                   </div>
                   <span className="text-xs text-gray-400">
-                    {new Date(m.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
+                    {parseApiDate(m.created_at).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
                   </span>
                 </div>
               ))}
@@ -135,7 +170,7 @@ export default function RepuestoDetalle() {
           />
           <Input label="Cantidad" type="number" value={cantidad} onChange={e => setCantidad(e.target.value)} placeholder="0" />
           <Input label="Motivo" value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: Compra a proveedor..." />
-          <Button fullWidth onClick={handleMovimiento}>Registrar</Button>
+          <Button fullWidth onClick={handleMovimiento} loading={saving}>Registrar</Button>
         </div>
       </Modal>
     </div>

@@ -1,39 +1,64 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { DollarSign, CreditCard, Smartphone, Banknote, Receipt } from 'lucide-react';
-import { Card, PageHeader, Button, formatCurrency } from '../components/ui';
+import { Card, PageHeader, Button, Loader, formatCurrency, parseApiDate, localDateKey } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { getResumenHoy, cerrarCaja, getCierres, getOrdenes } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync } from '../hooks/useAsync';
+
+const RESUMEN_VACIO = {
+  total_efectivo: 0,
+  total_transferencia: 0,
+  total_tarjeta: 0,
+  total_mixto: 0,
+  total_general: 0,
+  ordenes_entregadas: 0,
+};
 
 export default function Caja() {
   const user = useAuth(s => s.user);
   const [showConfirmCierre, setShowConfirmCierre] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
 
-  const resumen = useMemo(() => getResumenHoy(), [refresh]);
-  const cierres = useMemo(() => getCierres(), [refresh]);
-  const ordenesHoy = useMemo(() => {
-    const hoy = new Date().toISOString().split('T')[0];
-    return getOrdenes().filter(o => o.estado === 'entregado' && o.fecha_entrega?.startsWith(hoy));
-  }, [refresh]);
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [resumen, cierres, ordenes] = await Promise.all([
+      getResumenHoy(),
+      getCierres(),
+      getOrdenes(),
+    ]);
+    return { resumen, cierres, ordenes };
+  }, []);
+
+  const resumen = data?.resumen ?? RESUMEN_VACIO;
+  const cierres = data?.cierres ?? [];
+  const hoy = localDateKey();
+  const ordenesHoy = (data?.ordenes ?? []).filter(
+    o => o.estado === 'entregado' && o.fecha_entrega && localDateKey(parseApiDate(o.fecha_entrega)) === hoy
+  );
 
   const [errorCierre, setErrorCierre] = useState('');
   const [successCierre, setSuccessCierre] = useState('');
 
-  const handleCierre = () => {
+  const handleCierre = async () => {
     setErrorCierre('');
     // Verificar si ya hay un cierre hoy
-    const hoy = new Date().toISOString().split('T')[0];
     const cierreHoy = cierres.find(c => c.fecha === hoy);
     if (cierreHoy) {
       setErrorCierre('Ya se realizó un cierre de caja hoy. Solo se permite un cierre por día.');
       return;
     }
-    cerrarCaja(user!.id);
-    setShowConfirmCierre(false);
-    setSuccessCierre('Caja cerrada exitosamente');
-    setRefresh(r => r + 1);
-    setTimeout(() => setSuccessCierre(''), 3000);
+    setSaving(true);
+    try {
+      await cerrarCaja(user?.id);
+      setShowConfirmCierre(false);
+      setSuccessCierre('Caja cerrada exitosamente');
+      reload();
+      setTimeout(() => setSuccessCierre(''), 3000);
+    } catch (e: any) {
+      setErrorCierre(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -41,6 +66,16 @@ export default function Caja() {
       <PageHeader title="Caja" />
 
       <div className="px-4 py-4 space-y-4">
+        {loading && <Loader text="Cargando caja..." />}
+        {!loading && error && (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-red-600 text-sm">{error}</p>
+            <button onClick={reload} className="text-blue-600 text-sm font-medium">Reintentar</button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
         {/* Total del día */}
         <Card className="bg-gradient-to-br from-green-500 to-emerald-600 border-0 text-white">
           <div className="flex items-center gap-3 mb-2">
@@ -124,13 +159,15 @@ export default function Caja() {
                         <p className="text-xs text-gray-500">{c.total_general > 0 ? `${formatCurrency(c.total_general)} total` : 'Sin ventas'}</p>
                       </div>
                       <span className="text-xs text-gray-400">
-                        {new Date(c.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                        {parseApiDate(c.created_at).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                   ))}
                 </div>
               </Card>
             )}
+          </>
+        )}
           </>
         )}
       </div>
@@ -159,7 +196,7 @@ export default function Caja() {
             )}
             <div className="flex gap-3">
               <Button variant="secondary" onClick={() => { setShowConfirmCierre(false); setErrorCierre(''); }} className="flex-1">Cancelar</Button>
-              <Button variant="danger" onClick={handleCierre} className="flex-1">Confirmar</Button>
+              <Button variant="danger" onClick={handleCierre} className="flex-1" loading={saving}>Confirmar</Button>
             </div>
           </div>
         </div>

@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Phone, CreditCard, Wrench } from 'lucide-react';
-import { Card, StatusBadge, Button, Modal, Select, Input, formatCurrency, formatDate, formatDateTime } from '../components/ui';
+import { Card, StatusBadge, Button, Modal, Select, Input, Loader, formatCurrency, formatDate, formatDateTime } from '../components/ui';
 import { getOrden, getVehiculo, getCliente, actualizarOrdenEstado, cobrarOrden, eliminarItemOrden, getUsuario } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync } from '../hooks/useAsync';
 import type { EstadoOrden, MetodoPago } from '../types';
 
 const estados: { value: EstadoOrden; label: string }[] = [
@@ -25,12 +26,49 @@ export default function OrdenDetalle() {
   const [nuevoEstado, setNuevoEstado] = useState<EstadoOrden>('en_reparacion');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
+  // Debe declararse junto al resto de hooks: los returns condicionales de abajo
+  // no pueden dejar hooks sin ejecutar entre renders.
+  const [itemAEliminar, setItemAEliminar] = useState<string | null>(null);
 
-  const orden = useMemo(() => id ? getOrden(id) : null, [id, refresh]);
-  const vehiculo = orden ? getVehiculo(orden.vehiculo_id) : null;
-  const cliente = vehiculo ? getCliente(vehiculo.cliente_id) : null;
-  const mecanico = orden ? getUsuario(orden.mecanico_id) : null;
+  const { data, loading, error: loadError, reload } = useAsync(async () => {
+    if (!id) return null;
+    
+    try {
+      const orden = await getOrden(id);
+      if (!orden) return null;
+
+      const vehiculo = await getVehiculo(orden.vehiculo_id);
+      const cliente = vehiculo ? await getCliente(vehiculo.cliente_id) : null;
+      const mecanico = await getUsuario(orden.mecanico_id);
+
+      return { orden, vehiculo, cliente, mecanico };
+    } catch (e: any) {
+      throw new Error(e.message || 'Error al recuperar los detalles de la orden');
+    }
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="pb-20">
+        <Loader text="Cargando orden..." />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="p-4 text-center space-y-4">
+        <p className="text-red-600">{loadError}</p>
+        <Button onClick={reload}>Reintentar</Button>
+      </div>
+    );
+  }
+
+  const orden = data?.orden ?? null;
+  const vehiculo = data?.vehiculo ?? null;
+  const cliente = data?.cliente ?? null;
+  const mecanico = data?.mecanico ?? null;
 
   if (!orden) {
     return (
@@ -44,49 +82,58 @@ export default function OrdenDetalle() {
   const esFinalizada = orden.estado === 'entregado' || orden.estado === 'cancelado';
   const cambio = montoRecibido ? parseFloat(montoRecibido) - orden.total : 0;
 
-  const handleCambiarEstado = () => {
+  const handleCambiarEstado = async () => {
     setError('');
+    setSaving(true);
     try {
-      actualizarOrdenEstado(orden.id, nuevoEstado, user!.id);
+      await actualizarOrdenEstado(orden.id, nuevoEstado, user?.id);
       setSuccess('Estado actualizado correctamente');
       setShowCambiarEstado(false);
-      setRefresh(r => r + 1);
+      reload();
       setTimeout(() => setSuccess(''), 3000);
     } catch (e: any) {
       // No cerrar el modal si hay error, mostrar el mensaje dentro
       setError(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCobrar = () => {
+  const handleCobrar = async () => {
     setError('');
     const monto = parseFloat(montoRecibido);
     if (isNaN(monto) || monto < orden.total) {
       setError('El monto recibido debe ser igual o mayor al total');
       return;
     }
+    setSaving(true);
     try {
-      cobrarOrden(orden.id, metodoPago, monto, user!.id);
+      await cobrarOrden(orden.id, metodoPago, monto, user?.id);
       setSuccess('Orden cobrada y entregada exitosamente');
       setShowCobro(false);
-      setRefresh(r => r + 1);
+      reload();
       setTimeout(() => setSuccess(''), 3000);
     } catch (e: any) {
       setError(e.message);
+    } finally {
+      setSaving(false);
     }
   };
-
-  const [itemAEliminar, setItemAEliminar] = useState<string | null>(null);
 
   const handleEliminarItem = (itemId: string) => {
     setItemAEliminar(itemId);
   };
 
-  const confirmarEliminarItem = () => {
+  const confirmarEliminarItem = async () => {
     if (itemAEliminar) {
-      eliminarItemOrden(orden.id, itemAEliminar);
-      setItemAEliminar(null);
-      setRefresh(r => r + 1);
+      try {
+        await eliminarItemOrden(orden.id, itemAEliminar);
+        setItemAEliminar(null);
+        reload();
+      } catch (e: any) {
+        setError(e.message);
+        setItemAEliminar(null);
+      }
     }
   };
 
@@ -223,7 +270,7 @@ export default function OrdenDetalle() {
             options={estados.map(e => ({ value: e.value, label: e.label }))}
           />
           {error && <p className="text-red-600 text-sm bg-red-50 p-2 rounded-lg">{error}</p>}
-          <Button fullWidth onClick={handleCambiarEstado}>Confirmar Cambio</Button>
+          <Button fullWidth onClick={handleCambiarEstado} loading={saving}>Confirmar Cambio</Button>
         </div>
       </Modal>
 
@@ -259,7 +306,7 @@ export default function OrdenDetalle() {
             </div>
           )}
           {error && <p className="text-red-600 text-sm bg-red-50 p-2 rounded-lg">{error}</p>}
-          <Button fullWidth onClick={handleCobrar}>
+          <Button fullWidth onClick={handleCobrar} loading={saving}>
             <CreditCard className="w-5 h-5" /> Confirmar Pago
           </Button>
         </div>

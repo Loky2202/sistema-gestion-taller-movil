@@ -108,7 +108,11 @@ const estadoConfig: Record<EstadoOrden, { label: string; color: string; bg: stri
 };
 
 export function StatusBadge({ estado }: { estado: EstadoOrden }) {
-  const config = estadoConfig[estado];
+  const config = estadoConfig[estado] ?? {
+    label: estado ?? 'Sin estado',
+    color: 'text-gray-600',
+    bg: 'bg-gray-100',
+  };
   return (
     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${config.bg} ${config.color}`}>
       {config.label}
@@ -212,7 +216,7 @@ export function Toast({ message, type = 'success', onClose }: ToastProps) {
 export function OfflineBanner() {
   return (
     <div className="bg-orange-500 text-white text-center py-2 px-4 text-sm font-medium">
-      📡 Sin conexión, mostrando datos guardados
+      📡 Sin conexión con el servidor del taller
     </div>
   );
 }
@@ -262,13 +266,35 @@ export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(amount);
 }
 
+/**
+ * El backend devuelve fechas en UTC sin sufijo de zona (ej. 2026-10-27T20:15:00).
+ * JavaScript las interpretaría como hora local, así que añadimos la "Z".
+ */
+export function parseApiDate(value: string): Date {
+  const hasTime = value.includes('T');
+  const hasTimezone = /(Z|[+-]\d{2}:?\d{2})$/.test(value);
+  return new Date(hasTime && !hasTimezone ? `${value}Z` : value);
+}
+
+/** Fecha local en formato YYYY-MM-DD (para comparar con el "hoy" del taller). */
+export function localDateKey(date: Date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Format date
 export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
+  if (!dateStr) return '—';
+  const date = parseApiDate(dateStr);
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
 export function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr);
+  if (!dateStr) return '—';
+  const date = parseApiDate(dateStr);
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }

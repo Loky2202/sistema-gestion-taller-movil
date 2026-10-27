@@ -1,16 +1,34 @@
 import { useNavigate } from 'react-router-dom';
 import { DollarSign, ClipboardList, AlertTriangle, CheckCircle, Plus, TrendingUp } from 'lucide-react';
-import { Card, formatCurrency } from '../components/ui';
+import { Card, Button, Loader, formatCurrency } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { getDashboardResumen } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync } from '../hooks/useAsync';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = useAuth(s => s.user);
-  // Sin dependencias: se recalcula cada vez que se monta el componente
-  // (lo cual pasa al navegar desde otra pantalla)
-  const data = getDashboardResumen();
+  const { data, loading, error, reload } = useAsync(getDashboardResumen, []);
+
+  if (loading) {
+    return (
+      <div className="pb-20">
+        <Loader text="Cargando panel..." />
+        <BottomNav />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="p-6 text-center space-y-4">
+        <p className="text-red-600">{error ?? 'No se pudieron cargar los datos'}</p>
+        <Button onClick={reload}>Reintentar</Button>
+        <BottomNav />
+      </div>
+    );
+  }
 
   const maxIngreso = Math.max(...data.ingresos_7dias.map(d => d.total), 1);
 

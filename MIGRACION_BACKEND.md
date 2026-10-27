@@ -1,5 +1,8 @@
 # 🔄 Guía de Migración a Backend Real
 
+> ✅ **Estado: completada.** TallerPro ya usa FastAPI + SQLite con JWT y datos compartidos por LAN.
+> Este documento se conserva como referencia del proceso de migración.
+
 ## 📋 Contexto Actual
 
 La aplicación actualmente usa **localStorage** como base de datos, lo cual tiene limitaciones:

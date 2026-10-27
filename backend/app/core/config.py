@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "cambiar-esta-clave-secreta-en-produccion-usar-openssl-rand-hex-32"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_HOURS: int = 12
+
+    # Zona horaria del taller (offset respecto a UTC). Colombia = -5
+    UTC_OFFSET_HOURS: int = -5
     
     # Upload
     UPLOAD_DIR: str = "./uploads"

@@ -1,16 +1,20 @@
-import { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Search, Plus, Minus, Check } from 'lucide-react';
 import { Button, Input, Select, Card, PageHeader } from '../components/ui';
-import { buscarVehiculos, crearVehiculo, getClientes, crearCliente, crearOrden, getRepuestos, buscarRepuestos } from '../db';
+import { buscarVehiculos, crearVehiculo, getClientes, crearCliente, crearOrden, getRepuestos, getVehiculo } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync, useDebounced } from '../hooks/useAsync';
 import { formatCurrency } from '../components/ui';
-import type { Vehiculo, OrdenItem } from '../types';
+import type { Vehiculo, OrdenItem, Repuesto } from '../types';
 
 export default function NuevaOrden() {
   const navigate = useNavigate();
   const user = useAuth(s => s.user);
+  const [searchParams] = useSearchParams();
+  const vehiculoParam = searchParams.get('vehiculo');
   const [step, setStep] = useState(1);
+  const [saving, setSaving] = useState(false);
 
   // Step 1: Vehículo
   const [busquedaVeh, setBusquedaVeh] = useState('');
@@ -36,33 +40,64 @@ export default function NuevaOrden() {
   const [nuevoServicioDesc, setNuevoServicioDesc] = useState('');
   const [nuevoServicioPrecio, setNuevoServicioPrecio] = useState('');
 
-  const vehiculosEncontrados = useMemo(() =>
-    busquedaVeh.length >= 2 ? buscarVehiculos(busquedaVeh) : [],
-    [busquedaVeh]
-  );
+  const busquedaVehDebounced = useDebounced(busquedaVeh, 300);
 
-  const repuestosEncontrados = useMemo(() =>
-    buscarRepuestos(busquedaRepuesto).filter(r => r.activo && r.stock_actual > 0),
-    [busquedaRepuesto]
+  const { data: vehiculosData } = useAsync(
+    () =>
+      busquedaVehDebounced.length >= 2
+        ? buscarVehiculos(busquedaVehDebounced)
+        : Promise.resolve([] as Vehiculo[]),
+    [busquedaVehDebounced]
   );
+  const vehiculosEncontrados = vehiculosData ?? [];
+
+  const { data: clientesData } = useAsync(getClientes, []);
+  const clientes = clientesData ?? [];
+
+  const { data: repuestosData } = useAsync(getRepuestos, []);
+  const repuestos = repuestosData ?? [];
+
+  const repuestosEncontrados = repuestos.filter(r => {
+    if (!r.activo || r.stock_actual <= 0) return false;
+    if (!busquedaRepuesto.trim()) return true;
+    const q = busquedaRepuesto.toLowerCase();
+    return (
+      r.nombre.toLowerCase().includes(q) ||
+      r.sku.toLowerCase().includes(q) ||
+      r.categoria.toLowerCase().includes(q)
+    );
+  });
+
+  // Preseleccionar vehículo cuando se llega desde la pantalla de clientes
+  useEffect(() => {
+    if (!vehiculoParam) return;
+    let alive = true;
+    getVehiculo(vehiculoParam).then(v => {
+      if (alive && v) setVehiculoSeleccionado(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [vehiculoParam]);
 
   const total = items.reduce((s, i) => s + i.subtotal, 0);
 
   const [errorVehiculo, setErrorVehiculo] = useState('');
 
-  const handleCrearVehiculo = () => {
+  const handleCrearVehiculo = async () => {
     setErrorVehiculo('');
     if (!nuevoClienteNombre || !nuevoClienteTel || !nuevaPlaca || !nuevaMarca) {
       setErrorVehiculo('Complete los campos obligatorios');
       return;
     }
+    setSaving(true);
     try {
-      const clientes = getClientes();
-      let cliente = clientes.find(c => c.telefono === nuevoClienteTel);
+      const encontrados = await getClientes(nuevoClienteTel);
+      let cliente = encontrados.find(c => c.telefono === nuevoClienteTel);
       if (!cliente) {
-        cliente = crearCliente({ nombre: nuevoClienteNombre, telefono: nuevoClienteTel });
+        cliente = await crearCliente({ nombre: nuevoClienteNombre, telefono: nuevoClienteTel });
       }
-      const vehiculo = crearVehiculo({
+      const vehiculo = await crearVehiculo({
         placa: nuevaPlaca.toUpperCase(),
         tipo: nuevoTipo,
         marca: nuevaMarca,
@@ -76,22 +111,22 @@ export default function NuevaOrden() {
       setStep(2);
     } catch (e: any) {
       setErrorVehiculo(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
   const [errorRepuesto, setErrorRepuesto] = useState('');
 
-  const handleAgregarRepuesto = (repuestoId: string) => {
+  const handleAgregarRepuesto = (repuesto: Repuesto) => {
     setErrorRepuesto('');
-    const repuesto = getRepuestos().find(r => r.id === repuestoId);
-    if (!repuesto) return;
-    const existing = items.find(i => i.repuesto_id === repuestoId);
+    const existing = items.find(i => i.repuesto_id === repuesto.id);
     if (existing) {
       if (existing.cantidad >= repuesto.stock_actual) {
         setErrorRepuesto(`Stock insuficiente de ${repuesto.nombre}. Disponible: ${repuesto.stock_actual}`);
         return;
       }
-      setItems(items.map(i => i.repuesto_id === repuestoId
+      setItems(items.map(i => i.repuesto_id === repuesto.id
         ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precio_unitario }
         : i
       ));
@@ -102,7 +137,7 @@ export default function NuevaOrden() {
       }
       setItems([...items, {
         tipo: 'repuesto',
-        repuesto_id: repuestoId,
+        repuesto_id: repuesto.id,
         descripcion: repuesto.nombre,
         cantidad: 1,
         precio_unitario: repuesto.precio_venta,
@@ -130,19 +165,30 @@ export default function NuevaOrden() {
     setItems(items.filter((_, i) => i !== idx));
   };
 
-  const handleCrearOrden = () => {
+  const handleCrearOrden = async () => {
     if (!vehiculoSeleccionado || !fallaReportada || items.length === 0) {
       alert('Complete todos los pasos antes de crear la orden');
       return;
     }
-    const orden = crearOrden({
-      vehiculo_id: vehiculoSeleccionado.id,
-      mecanico_id: user!.id,
-      falla_reportada: fallaReportada,
-      diagnostico: diagnostico || undefined,
-      items,
-    });
-    navigate(`/ordenes/${orden.id}`);
+    setSaving(true);
+    try {
+      const orden = await crearOrden({
+        vehiculo_id: vehiculoSeleccionado.id,
+        mecanico_id: user?.id ?? '',
+        falla_reportada: fallaReportada,
+        diagnostico: diagnostico || undefined,
+        items,
+      });
+      if (orden && orden.id) {
+        navigate(`/ordenes/${orden.id}`);
+      } else {
+        throw new Error('El servidor no devolvió un ID de orden válido');
+      }
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -201,7 +247,6 @@ export default function NuevaOrden() {
                 {vehiculosEncontrados.length > 0 && !vehiculoSeleccionado && (
                   <div className="space-y-2">
                     {vehiculosEncontrados.map(v => {
-                      const clientes = getClientes();
                       const cli = clientes.find(c => c.id === v.cliente_id);
                       return (
                         <Card key={v.id} onClick={() => { setVehiculoSeleccionado(v); setStep(2); }}>
@@ -236,7 +281,7 @@ export default function NuevaOrden() {
                 )}
                 <div className="flex gap-2 pt-2">
                   <Button variant="secondary" onClick={() => { setShowNuevoVehiculo(false); setErrorVehiculo(''); }} className="flex-1">Cancelar</Button>
-                  <Button onClick={handleCrearVehiculo} className="flex-1">Crear y Continuar</Button>
+                  <Button onClick={handleCrearVehiculo} className="flex-1" loading={saving}>Crear y Continuar</Button>
                 </div>
               </div>
             )}
@@ -333,7 +378,7 @@ export default function NuevaOrden() {
             {repuestosEncontrados.length > 0 && (
               <div className="space-y-2 max-h-60 overflow-y-auto">
                 {repuestosEncontrados.map(r => (
-                  <Card key={r.id} onClick={() => handleAgregarRepuesto(r.id)}>
+                  <Card key={r.id} onClick={() => handleAgregarRepuesto(r)}>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="font-medium text-sm">{r.nombre}</p>
@@ -358,7 +403,7 @@ export default function NuevaOrden() {
 
             {/* Crear orden */}
             <div className="pt-4 space-y-2">
-              <Button fullWidth size="lg" onClick={handleCrearOrden} disabled={items.length === 0}>
+              <Button fullWidth size="lg" onClick={handleCrearOrden} disabled={items.length === 0} loading={saving}>
                 ✓ Crear Orden ({formatCurrency(total)})
               </Button>
             </div>

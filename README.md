@@ -43,7 +43,7 @@
 - ✅ **Dashboard en Tiempo Real** - Métricas clave del negocio
 - ✅ **Roles y Permisos** - Admin y Mecánico con accesos diferenciados
 - ✅ **PWA Instalable** - Funciona como app nativa en móviles
-- ✅ **Modo Offline** - Continúa trabajando sin conexión
+- ✅ **Datos compartidos por LAN** - Un servidor en el taller; todos los dispositivos ven la misma información
 
 ### 🎨 Experiencia de Usuario
 
@@ -117,11 +117,18 @@ docker compose up -d
 ### Desarrollo Local (sin Docker)
 
 ```bash
-# Solo frontend
+# Terminal 1 - Backend (API en http://localhost:8001)
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8001
+
+# Terminal 2 - Frontend (http://localhost:3000)
+# Vite redirige /api al backend del puerto 8001
 npm install
 npm run dev
-# http://localhost:3000
 ```
+
+> Requiere Python 3.11+ y Node 22+. La base de datos se crea sola en `backend/data/taller.db`.
 
 ### Comandos Útiles
 
@@ -208,34 +215,43 @@ Frontend:
 ├── Zustand            # State management
 └── Lucide React       # Icons
 
-Storage:
-└── localStorage       # Datos (MVP)
-    └── Migrar a: SQLite/PostgreSQL (producción)
+Backend:
+├── FastAPI            # API REST
+├── SQLite             # Base de datos (data/taller.db)
+├── SQLAlchemy         # ORM
+└── JWT (python-jose)  # Autenticación
+
+Servido por Nginx, que hace proxy de /api al backend.
 ```
 
 ### Estructura del Proyecto
 
 ```
 tallerpro/
+├── backend/           # API FastAPI + SQLAlchemy
+│   ├── app/
+│   │   ├── api.py     # Endpoints
+│   │   ├── models/    # Modelos (UUID)
+│   │   └── core/      # Config, JWT, dependencias
+│   └── requirements.txt
 ├── src/
+│   ├── api/           # Cliente HTTP (fetch + JWT)
+│   ├── hooks/         # useAsync / useDebounced
 │   ├── components/    # Componentes reutilizables
 │   ├── pages/         # Páginas de la aplicación
-│   ├── db/           # Capa de datos (localStorage)
-│   ├── store/        # Estado global (Zustand)
-│   ├── types/        # Tipos TypeScript
-│   └── utils/        # Utilidades
-├── public/
-│   ├── manifest.json # PWA manifest
-│   ├── sw.js         # Service Worker
-│   └── icon.svg      # Icono de la app
-├── index.html        # HTML principal
-└── vite.config.ts    # Configuración Vite
+│   ├── db/            # Capa de datos (envoltorio del API)
+│   ├── store/         # Estado global (Zustand)
+│   └── types/         # Tipos TypeScript
+├── data/              # Base de datos SQLite (volumen Docker)
+├── public/            # PWA manifest, Service Worker, icono
+├── nginx.conf         # Proxy /api + SPA
+└── vite.config.ts     # Configuración Vite
 ```
 
 ### Flujo de Datos
 
 ```
-Usuario → UI → Componente → db/index.ts → localStorage
+Usuario → UI → Componente → db/index.ts → api/client.ts → FastAPI → SQLite
                 ↓
             Estado (Zustand)
                 ↓
@@ -246,33 +262,16 @@ Usuario → UI → Componente → db/index.ts → localStorage
 
 ## 🌐 Deploy a Producción
 
-### Opción 1: Vercel (Recomendado - Gratis)
+> TallerPro necesita el backend (FastAPI + SQLite). El despliegue recomendado es **Docker en la PC del taller**, accesible por LAN. Un hosting estático (Vercel/Netlify) solo serviría el frontend y no tendría datos.
+
+### Opción recomendada: PC del taller con Docker
 
 ```bash
-# 1. Subir código a GitHub
-git push origin main
-
-# 2. Conectar en Vercel
-# https://vercel.com → New Project → Import Git Repository
-
-# 3. Deploy automático
-# URL: https://tallerpro.vercel.app
+docker compose up -d --build
+# Abrir desde cualquier dispositivo de la red: http://IP-DE-LA-PC:8000
 ```
 
-**Ventajas:**
-- ✅ Deploy automático desde Git
-- ✅ CDN global
-- ✅ SSL automático
-- ✅ Gratis para proyectos personales
-
-### Opción 2: Netlify (Gratis)
-
-```bash
-# Similar a Vercel
-# https://netlify.com → Add new site → Import from Git
-```
-
-### Opción 3: Servidor Propio
+### Opción: Servidor propio con Nginx
 
 ```bash
 # Build local
@@ -283,6 +282,12 @@ scp -r dist/* usuario@servidor:/var/www/tallerpro/
 
 # Configurar Nginx (ver DEPLOY.md)
 ```
+
+### ⚠️ Limitaciones conocidas
+
+- La app necesita que la PC del taller esté encendida y accesible por LAN. No hay escritura offline (los datos viven en el servidor).
+- Para **instalar la PWA** en celulares hace falta HTTPS (o `localhost`). Por HTTP usando una IP de la LAN la app funciona, pero el navegador no registra el Service Worker.
+- Los respaldos son manuales: copiar `data/taller.db` a un USB o disco externo.
 
 ### 📚 Documentación Completa de Deploy
 
@@ -312,8 +317,8 @@ Consulta **[DEPLOY.md](./DEPLOY.md)** para:
 ### Documentación Técnica
 
 - **Arquitectura**: Ver sección [Arquitectura](#-arquitectura)
-- **API**: Actualmente localStorage, ver [MIGRACION_BACKEND.md](./MIGRACION_BACKEND.md)
-- **Base de Datos**: Esquema en `src/types/index.ts`
+- **API**: FastAPI en `/api/v1` (Swagger en `http://localhost:8001/docs`)
+- **Base de Datos**: SQLite, modelos en `backend/app/models/models.py`
 - **Componentes**: Ver `src/components/`
 
 ---
@@ -328,17 +333,17 @@ Consulta **[DEPLOY.md](./DEPLOY.md)** para:
 - [x] Sistema de caja
 - [x] Dashboard con métricas
 - [x] PWA instalable
-- [x] Modo offline básico
 - [x] Validaciones de datos
 - [x] Documentación completa
+- [x] Backend FastAPI + SQLite, JWT real y datos compartidos por LAN
 
-### 🔄 v1.1.0 - Backend Real (Próximo)
+### ✅ v1.1.0 - Backend Real (Actual)
 
-- [ ] API REST con FastAPI
-- [ ] Base de datos SQLite/PostgreSQL
-- [ ] Autenticación JWT real
-- [ ] Multi-dispositivo
-- [ ] Sincronización offline/online
+- [x] API REST con FastAPI
+- [x] Base de datos SQLite
+- [x] Autenticación JWT real
+- [x] Multi-dispositivo por LAN
+- [ ] Sincronización offline/online (no incluida)
 - [ ] Backups automáticos
 
 ### 📅 v1.2.0 - Funcionalidades Avanzadas

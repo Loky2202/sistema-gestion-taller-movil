@@ -20,7 +20,8 @@ export interface Usuario {
   id: string;
   nombre: string;
   email: string;
-  password: string;
+  /** Solo se usa al crear/actualizar; nunca lo devuelve el backend. */
+  password?: string;
   rol: Rol;
   activo: boolean;
   created_at: string;
@@ -42,7 +43,7 @@ export interface Vehiculo {
   marca: string;
   modelo: string;
   anio: number;
-  color: string;
+  color?: string;
   foto_url?: string;
   cliente_id: string;
   created_at: string;
@@ -88,7 +89,7 @@ export interface Repuesto {
   stock_minimo: number;
   precio_costo: number;
   precio_venta: number;
-  proveedor: string;
+  proveedor?: string;
   foto_url?: string;
   activo: boolean;
   created_at: string;
@@ -142,4 +143,5 @@ export interface DashboardResumen {
   ordenes_listas: number;
   stock_critico: Repuesto[];
   ordenes_listas_detalle: { orden: Orden; cliente: string; vehiculo: string }[];
+  ingresos_7dias: { fecha: string; total: number }[];
 }

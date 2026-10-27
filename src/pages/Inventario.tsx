@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, AlertTriangle, Plus } from 'lucide-react';
-import { Card, PageHeader, StockBadge, EmptyState, formatCurrency, Button, Input, Select, Modal } from '../components/ui';
+import { Card, PageHeader, StockBadge, EmptyState, Loader, formatCurrency, Button, Input, Select, Modal } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
-import { getRepuestos, buscarRepuestos, crearRepuesto } from '../db';
+import { getRepuestos, crearRepuesto } from '../db';
 import { useAuth } from '../store/auth';
+import { useAsync } from '../hooks/useAsync';
 
 export default function Inventario() {
   const navigate = useNavigate();
@@ -12,7 +13,7 @@ export default function Inventario() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [showNuevo, setShowNuevo] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
 
   // Formulario nuevo repuesto
   const [nuevoSku, setNuevoSku] = useState('');
@@ -25,48 +26,64 @@ export default function Inventario() {
   const [nuevoVenta, setNuevoVenta] = useState('');
   const [nuevoProveedor, setNuevoProveedor] = useState('');
 
-  const repuestos = useMemo(() => {
-    let reps = busqueda ? buscarRepuestos(busqueda) : getRepuestos();
-    if (filtroCategoria) reps = reps.filter(r => r.categoria === filtroCategoria);
-    return reps.filter(r => r.activo);
-  }, [busqueda, filtroCategoria]);
+  const { data, loading, error, reload } = useAsync(getRepuestos, []);
+  const todos = data ?? [];
 
-  const stockBajo = repuestos.filter(r => r.stock_actual <= r.stock_minimo);
+  const repuestos = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    return todos.filter(r => {
+      if (!r.activo) return false;
+      if (filtroCategoria && r.categoria !== filtroCategoria) return false;
+      if (!q) return true;
+      return (
+        r.nombre.toLowerCase().includes(q) ||
+        r.sku.toLowerCase().includes(q) ||
+        r.categoria.toLowerCase().includes(q)
+      );
+    });
+  }, [todos, busqueda, filtroCategoria]);
+
+  const stockBajo = todos.filter(r => r.activo && r.stock_actual <= r.stock_minimo);
 
   const categorias = useMemo(() => {
-    const reps = getRepuestos();
-    const cats = [...new Set(reps.map(r => r.categoria))];
+    const cats = [...new Set(todos.map(r => r.categoria))];
     const defaults = ['Motor', 'Frenos', 'Suspensión', 'Eléctrico', 'Llantas', 'Lubricantes'];
     return [...new Set([...defaults, ...cats])];
-  }, [refresh]);
+  }, [todos]);
 
-  const handleCrearRepuesto = () => {
+  const handleCrearRepuesto = async () => {
     if (!nuevoSku || !nuevoNombre || !nuevoVenta || !nuevoStock) {
       alert('Complete los campos obligatorios (Código, Nombre, Precio venta, Stock)');
       return;
     }
-    const existentes = getRepuestos();
-    if (existentes.find(r => r.sku.toLowerCase() === nuevoSku.toLowerCase())) {
+    if (todos.some(r => r.sku.toLowerCase() === nuevoSku.toLowerCase())) {
       alert('Ya existe un repuesto con ese código');
       return;
     }
-    crearRepuesto({
-      sku: nuevoSku.toUpperCase(),
-      nombre: nuevoNombre,
-      categoria: nuevoCategoria,
-      unidad: nuevoUnidad,
-      stock_actual: parseFloat(nuevoStock) || 0,
-      stock_minimo: parseFloat(nuevoStockMin) || 0,
-      precio_costo: parseFloat(nuevoCosto) || 0,
-      precio_venta: parseFloat(nuevoVenta) || 0,
-      proveedor: nuevoProveedor,
-      activo: true,
-    });
-    // Reset form
-    setNuevoSku(''); setNuevoNombre(''); setNuevoStock(''); setNuevoStockMin('');
-    setNuevoCosto(''); setNuevoVenta(''); setNuevoProveedor('');
-    setShowNuevo(false);
-    setRefresh(r => r + 1);
+    setSaving(true);
+    try {
+      await crearRepuesto({
+        sku: nuevoSku.toUpperCase(),
+        nombre: nuevoNombre,
+        categoria: nuevoCategoria,
+        unidad: nuevoUnidad,
+        stock_actual: parseFloat(nuevoStock) || 0,
+        stock_minimo: parseFloat(nuevoStockMin) || 0,
+        precio_costo: parseFloat(nuevoCosto) || 0,
+        precio_venta: parseFloat(nuevoVenta) || 0,
+        proveedor: nuevoProveedor,
+        activo: true,
+      });
+      // Reset form
+      setNuevoSku(''); setNuevoNombre(''); setNuevoStock(''); setNuevoStockMin('');
+      setNuevoCosto(''); setNuevoVenta(''); setNuevoProveedor('');
+      setShowNuevo(false);
+      reload();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -125,7 +142,14 @@ export default function Inventario() {
         )}
 
         {/* Lista */}
-        {repuestos.length === 0 ? (
+        {loading ? (
+          <Loader text="Cargando inventario..." />
+        ) : error ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-red-600 text-sm">{error}</p>
+            <button onClick={reload} className="text-blue-600 text-sm font-medium">Reintentar</button>
+          </div>
+        ) : repuestos.length === 0 ? (
           <EmptyState
             icon={<Search className="w-8 h-8" />}
             title="Sin resultados"
@@ -226,7 +250,7 @@ export default function Inventario() {
             onChange={e => setNuevoProveedor(e.target.value)}
             placeholder="Nombre del proveedor"
           />
-          <Button fullWidth onClick={handleCrearRepuesto}>
+          <Button fullWidth onClick={handleCrearRepuesto} loading={saving}>
             Guardar Repuesto
           </Button>
         </div>

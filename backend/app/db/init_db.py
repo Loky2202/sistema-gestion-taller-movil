@@ -1,8 +1,8 @@
 # Inicialización de Base de Datos con Seed Data
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from .models import User, Cliente, Vehiculo, Orden, OrdenItem, Repuesto
-from .core.security import get_password_hash
+from ..models import User, Cliente, Vehiculo, Orden, OrdenItem, Repuesto
+from ..core.security import get_password_hash
 
 
 def init_db(db: Session):

@@ -1,9 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, Phone, Car, Plus } from 'lucide-react';
-import { Card, PageHeader, Button, Input, Modal, EmptyState, formatDate } from '../components/ui';
+import { Card, PageHeader, Button, Input, Modal, EmptyState, Loader, formatDate } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
-import { getClientes, getVehiculosByCliente, crearCliente, crearVehiculo, getHistorialVehiculo, getVehiculo } from '../db';
+import { getClientes, getVehiculos, getOrdenes, crearCliente, crearVehiculo } from '../db';
+import { useAsync } from '../hooks/useAsync';
 import type { Vehiculo } from '../types';
 
 export default function Clientes() {
@@ -24,41 +25,62 @@ export default function Clientes() {
   const [anio, setAnio] = useState('2023');
   const [color, setColor] = useState('');
 
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
+
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [clientes, vehiculos, ordenes] = await Promise.all([
+      getClientes(),
+      getVehiculos(),
+      getOrdenes(),
+    ]);
+    return { clientes, vehiculos, ordenes };
+  }, []);
 
   const clientes = useMemo(() => {
-    const all = getClientes();
-    if (!busqueda) return all;
-    const q = busqueda.toLowerCase();
+    const all = data?.clientes ?? [];
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return all;
     return all.filter(c => c.nombre.toLowerCase().includes(q) || c.telefono.includes(q));
-  }, [busqueda, refresh]);
+  }, [data, busqueda]);
+
+  const vehiculosDe = (clienteId: string): Vehiculo[] =>
+    (data?.vehiculos ?? []).filter(v => v.cliente_id === clienteId);
+
+  const historialDe = (vehiculoId: string) =>
+    (data?.ordenes ?? []).filter(o => o.vehiculo_id === vehiculoId);
 
   const [errorCliente, setErrorCliente] = useState('');
   const [errorVehiculo, setErrorVehiculo] = useState('');
 
-  const handleCrearCliente = () => {
+  const handleCrearCliente = async () => {
     setErrorCliente('');
     if (!nombre || !telefono) { setErrorCliente('Nombre y teléfono son obligatorios'); return; }
+    setSaving(true);
     try {
-      crearCliente({ nombre, telefono, email: email || undefined });
+      await crearCliente({ nombre, telefono, email: email || undefined });
       setNombre(''); setTelefono(''); setEmail('');
       setShowNuevo(false);
-      setRefresh(r => r + 1);
+      reload();
     } catch (e: any) {
       setErrorCliente(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleCrearVehiculo = () => {
+  const handleCrearVehiculo = async () => {
     setErrorVehiculo('');
     if (!placa || !marca || !selectedCliente) { setErrorVehiculo('Complete los campos'); return; }
+    setSaving(true);
     try {
-      crearVehiculo({ placa: placa.toUpperCase(), tipo, marca, modelo, anio: parseInt(anio) || 2023, color, cliente_id: selectedCliente });
+      await crearVehiculo({ placa: placa.toUpperCase(), tipo, marca, modelo, anio: parseInt(anio) || 2023, color, cliente_id: selectedCliente });
       setPlaca(''); setMarca(''); setModelo(''); setColor('');
       setShowNuevoVeh(false);
-      setRefresh(r => r + 1);
+      reload();
     } catch (e: any) {
       setErrorVehiculo(e.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -85,12 +107,19 @@ export default function Clientes() {
           />
         </div>
 
-        {clientes.length === 0 ? (
+        {loading ? (
+          <Loader text="Cargando clientes..." />
+        ) : error ? (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-red-600 text-sm">{error}</p>
+            <button onClick={reload} className="text-blue-600 text-sm font-medium">Reintentar</button>
+          </div>
+        ) : clientes.length === 0 ? (
           <EmptyState icon={<Search className="w-8 h-8" />} title="Sin clientes" description="Agrega un nuevo cliente" />
         ) : (
           <div className="space-y-3">
             {clientes.map(c => {
-              const vehiculos = getVehiculosByCliente(c.id);
+              const vehiculos = vehiculosDe(c.id);
               const isExpanded = selectedCliente === c.id;
               return (
                 <div key={c.id}>
@@ -110,7 +139,7 @@ export default function Clientes() {
                     {isExpanded && (
                       <div className="mt-3 pt-3 border-t border-gray-100 space-y-2">
                         {vehiculos.map(v => {
-                          const historial = getHistorialVehiculo(v.id);
+                          const historial = historialDe(v.id);
                           return (
                             <div key={v.id} className="p-3 bg-gray-50 rounded-xl">
                               <div className="flex items-center justify-between">
@@ -162,7 +191,7 @@ export default function Clientes() {
               {errorCliente}
             </div>
           )}
-          <Button fullWidth onClick={handleCrearCliente}>Guardar Cliente</Button>
+          <Button fullWidth onClick={handleCrearCliente} loading={saving}>Guardar Cliente</Button>
         </div>
       </Modal>
 
@@ -183,7 +212,7 @@ export default function Clientes() {
               {errorVehiculo}
             </div>
           )}
-          <Button fullWidth onClick={handleCrearVehiculo}>Guardar Vehículo</Button>
+          <Button fullWidth onClick={handleCrearVehiculo} loading={saving}>Guardar Vehículo</Button>
         </div>
       </Modal>
 

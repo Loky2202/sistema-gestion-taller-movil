@@ -12,19 +12,18 @@ export default function Login() {
   const login = useAuth(s => s.login);
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-    setTimeout(() => {
-      const success = login(email, password);
-      if (success) {
-        navigate('/');
-      } else {
-        setError('Email o contraseña incorrectos');
-      }
+    try {
+      await login(email, password);
+      navigate('/');
+    } catch (err: any) {
+      setError(err?.message ?? 'Email o contraseña incorrectos');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
 
   return (

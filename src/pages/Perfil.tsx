@@ -1,25 +1,38 @@
 import { useNavigate } from 'react-router-dom';
 import { LogOut, Users, Shield, AlertTriangle, Play } from 'lucide-react';
-import { Card, Button, PageHeader } from '../components/ui';
+import { Card, Button, PageHeader, Loader } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { useAuth } from '../store/auth';
 import { getAlertas, marcarAlertaLeida, getUsuarios, resetDatabase } from '../db';
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
+import { useAsync } from '../hooks/useAsync';
 import { runTests } from '../tests';
 
 export default function Perfil() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [refresh, setRefresh] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [testResults, setTestResults] = useState<{ passed: number; failed: number } | null>(null);
 
-  const alertas = useMemo(() => getAlertas().filter(a => !a.leida), [refresh]);
-  const usuarios = useMemo(() => getUsuarios(), [refresh]);
+  const { data, loading, error, reload } = useAsync(async () => {
+    const [alertas, usuarios] = await Promise.all([getAlertas(), getUsuarios()]);
+    return { alertas, usuarios };
+  }, []);
 
-  const handleRunTests = () => {
-    const results = runTests();
-    setTestResults(results);
-    setRefresh(r => r + 1);
+  const alertas = (data?.alertas ?? []).filter(a => !a.leida);
+  const usuarios = data?.usuarios ?? [];
+
+  const handleRunTests = async () => {
+    setSaving(true);
+    try {
+      const results = await runTests();
+      setTestResults(results);
+      reload();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -27,11 +40,18 @@ export default function Perfil() {
     navigate('/login');
   };
 
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('¿Restablecer todos los datos? Se perderán todos los cambios.')) {
-      resetDatabase();
-      logout();
-      navigate('/login');
+      setSaving(true);
+      try {
+        await resetDatabase();
+        logout();
+        navigate('/login');
+      } catch (e: any) {
+        alert(e.message);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
@@ -40,6 +60,14 @@ export default function Perfil() {
       <PageHeader title="Perfil" />
 
       <div className="px-4 py-4 space-y-4">
+        {loading && <Loader text="Cargando perfil..." />}
+        {!loading && error && (
+          <div className="text-center py-4 space-y-3">
+            <p className="text-red-600 text-sm">{error}</p>
+            <button onClick={reload} className="text-blue-600 text-sm font-medium">Reintentar</button>
+          </div>
+        )}
+
         {/* User info */}
         <Card>
           <div className="flex items-center gap-4">
@@ -71,7 +99,7 @@ export default function Perfil() {
                 <div key={a.id} className="flex items-center justify-between p-3 bg-orange-50 rounded-xl">
                   <p className="text-sm text-orange-700 flex-1">{a.mensaje}</p>
                   <button
-                    onClick={() => { marcarAlertaLeida(a.id); setRefresh(r => r + 1); }}
+                    onClick={async () => { await marcarAlertaLeida(a.id); reload(); }}
                     className="text-xs text-orange-500 font-medium ml-2"
                   >
                     ✓
@@ -121,10 +149,10 @@ export default function Perfil() {
         <div className="space-y-3 pt-4">
           {user?.rol === 'admin' && (
             <>
-              <Button fullWidth variant="secondary" onClick={handleRunTests}>
+              <Button fullWidth variant="secondary" onClick={handleRunTests} loading={saving}>
                 <Play className="w-5 h-5" /> Ejecutar Pruebas del Sistema
               </Button>
-              <Button fullWidth variant="ghost" onClick={handleReset} className="text-red-500">
+              <Button fullWidth variant="ghost" onClick={handleReset} className="text-red-500" loading={saving}>
                 Restablecer datos de ejemplo
               </Button>
             </>

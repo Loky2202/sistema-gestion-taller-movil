@@ -14,6 +14,13 @@ export default defineConfig({
     hmr: {
       port: 3000,
     },
+    // El frontend llama a /api/v1 y Vite lo redirige al backend local
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
+    },
   },
   
   // Configuración de build para producción

@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Usuario } from '../types';
 import * as db from '../db';
+import { getToken } from '../api/client';
 
 interface AuthState {
   user: Usuario | null;
+  token: string | null;
   isAuthenticated: boolean;
   isOnline: boolean;
-  login: (email: string, password: string) => boolean;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   setOnline: (online: boolean) => void;
 }
@@ -16,18 +18,16 @@ export const useAuth = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
       isOnline: navigator.onLine,
-      login: (email: string, password: string) => {
-        const user = db.login(email, password);
-        if (user) {
-          set({ user, isAuthenticated: true });
-          return true;
-        }
-        return false;
+      login: async (email: string, password: string) => {
+        const user = await db.login(email, password);
+        set({ user, token: getToken(), isAuthenticated: !!user });
       },
       logout: () => {
-        set({ user: null, isAuthenticated: false });
+        db.logout();
+        set({ user: null, token: null, isAuthenticated: false });
       },
       setOnline: (online: boolean) => set({ isOnline: online }),
     }),

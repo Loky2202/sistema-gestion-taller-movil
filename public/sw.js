@@ -1,5 +1,5 @@
 // Service Worker para TallerPro PWA
-const CACHE_NAME = 'tallerpro-v1';
+const CACHE_NAME = 'tallerpro-v3';
 const OFFLINE_URL = '/';
 
 // Recursos críticos para cachear
@@ -45,6 +45,9 @@ self.addEventListener('fetch', (event) => {
   
   // Ignorar peticiones a dominios externos
   if (!event.request.url.startsWith(self.location.origin)) return;
+
+  // La API nunca se cachea: los datos viven en el servidor del taller
+  if (event.request.url.includes('/api/')) return;
 
   event.respondWith(
     fetch(event.request)
