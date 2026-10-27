@@ -4,12 +4,13 @@ import { Card, formatCurrency } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { getDashboardResumen } from '../db';
 import { useAuth } from '../store/auth';
-import { useMemo } from 'react';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = useAuth(s => s.user);
-  const data = useMemo(() => getDashboardResumen(), []);
+  // Sin dependencias: se recalcula cada vez que se monta el componente
+  // (lo cual pasa al navegar desde otra pantalla)
+  const data = getDashboardResumen();
 
   const maxIngreso = Math.max(...data.ingresos_7dias.map(d => d.total), 1);
 

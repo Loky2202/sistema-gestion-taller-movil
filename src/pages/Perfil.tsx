@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom';
-import { LogOut, Users, Shield, AlertTriangle } from 'lucide-react';
+import { LogOut, Users, Shield, AlertTriangle, Play } from 'lucide-react';
 import { Card, Button, PageHeader } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { useAuth } from '../store/auth';
 import { getAlertas, marcarAlertaLeida, getUsuarios, resetDatabase } from '../db';
 import { useState, useMemo } from 'react';
+import { runTests } from '../tests';
 
 export default function Perfil() {
   const { user, logout } = useAuth();
@@ -12,6 +13,13 @@ export default function Perfil() {
   const alertas = useMemo(() => getAlertas().filter(a => !a.leida), []);
   const usuarios = useMemo(() => getUsuarios(), []);
   const [, setRefresh] = useState(0);
+  const [testResults, setTestResults] = useState<{ passed: number; failed: number } | null>(null);
+
+  const handleRunTests = () => {
+    const results = runTests();
+    setTestResults(results);
+    setRefresh(r => r + 1);
+  };
 
   const handleLogout = () => {
     logout();
@@ -110,15 +118,42 @@ export default function Perfil() {
 
         {/* Acciones */}
         <div className="space-y-3 pt-4">
+          {user?.rol === 'admin' && (
+            <>
+              <Button fullWidth variant="secondary" onClick={handleRunTests}>
+                <Play className="w-5 h-5" /> Ejecutar Pruebas del Sistema
+              </Button>
+              <Button fullWidth variant="ghost" onClick={handleReset} className="text-red-500">
+                Restablecer datos de ejemplo
+              </Button>
+            </>
+          )}
           <Button fullWidth variant="secondary" onClick={handleLogout}>
             <LogOut className="w-5 h-5" /> Cerrar Sesión
           </Button>
-          {user?.rol === 'admin' && (
-            <Button fullWidth variant="ghost" onClick={handleReset} className="text-red-500">
-              Restablecer datos de ejemplo
-            </Button>
-          )}
         </div>
+
+        {/* Resultados de pruebas */}
+        {testResults && (
+          <Card className={testResults.failed === 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}>
+            <h3 className="font-bold text-lg mb-2">
+              {testResults.failed === 0 ? '✅ Todas las pruebas pasaron' : '❌ Algunas pruebas fallaron'}
+            </h3>
+            <div className="flex gap-4 text-sm">
+              <div className="flex items-center gap-1">
+                <span className="font-bold text-green-700">{testResults.passed}</span>
+                <span className="text-gray-600">pasadas</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="font-bold text-red-700">{testResults.failed}</span>
+                <span className="text-gray-600">fallidas</span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Revisa la consola del navegador (F12) para ver el detalle de cada prueba.
+            </p>
+          </Card>
+        )}
 
         {/* Footer */}
         <div className="text-center pt-4 pb-4">

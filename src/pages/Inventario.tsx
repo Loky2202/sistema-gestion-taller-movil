@@ -12,7 +12,7 @@ export default function Inventario() {
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
   const [showNuevo, setShowNuevo] = useState(false);
-  const [, setRefresh] = useState(0);
+  const [refresh, setRefresh] = useState(0);
 
   // Formulario nuevo repuesto
   const [nuevoSku, setNuevoSku] = useState('');
@@ -36,10 +36,9 @@ export default function Inventario() {
   const categorias = useMemo(() => {
     const reps = getRepuestos();
     const cats = [...new Set(reps.map(r => r.categoria))];
-    // Agregar categorías por defecto si no existen
     const defaults = ['Motor', 'Frenos', 'Suspensión', 'Eléctrico', 'Llantas', 'Lubricantes'];
     return [...new Set([...defaults, ...cats])];
-  }, [busqueda]); // eslint-disable-line
+  }, [refresh]);
 
   const handleCrearRepuesto = () => {
     if (!nuevoSku || !nuevoNombre || !nuevoVenta || !nuevoStock) {

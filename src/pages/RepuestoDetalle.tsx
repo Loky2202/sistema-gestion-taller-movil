@@ -13,10 +13,10 @@ export default function RepuestoDetalle() {
   const [tipoMov, setTipoMov] = useState<'entrada' | 'ajuste'>('entrada');
   const [cantidad, setCantidad] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [, setRefresh] = useState(0);
+  const [refresh, setRefresh] = useState(0);
 
-  const repuesto = useMemo(() => id ? getRepuesto(id) : null, [id]);
-  const movimientos = useMemo(() => id ? getMovimientosByRepuesto(id) : [], [id]);
+  const repuesto = useMemo(() => id ? getRepuesto(id) : null, [id, refresh]);
+  const movimientos = useMemo(() => id ? getMovimientosByRepuesto(id) : [], [id, refresh]);
 
   if (!repuesto) {
     return <div className="p-4 text-center"><p>Repuesto no encontrado</p></div>;

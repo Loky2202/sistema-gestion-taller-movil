@@ -25,9 +25,9 @@ export default function OrdenDetalle() {
   const [nuevoEstado, setNuevoEstado] = useState<EstadoOrden>('en_reparacion');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [, setRefresh] = useState(0);
+  const [refresh, setRefresh] = useState(0);
 
-  const orden = useMemo(() => id ? getOrden(id) : null, [id]);
+  const orden = useMemo(() => id ? getOrden(id) : null, [id, refresh]);
   const vehiculo = orden ? getVehiculo(orden.vehiculo_id) : null;
   const cliente = vehiculo ? getCliente(vehiculo.cliente_id) : null;
   const mecanico = orden ? getUsuario(orden.mecanico_id) : null;

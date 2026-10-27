@@ -281,6 +281,34 @@ export function registrarMovimiento(repuestoId: string, tipo: TipoMovimiento, ca
   return mov;
 }
 
+// Versión interna que opera sobre un objeto DB ya cargado (para transacciones)
+function registrarMovimientoInterno(db: Database, repuestoId: string, tipo: TipoMovimiento, cantidad: number, motivo: string, usuarioId: string): MovimientoInventario {
+  const mov: MovimientoInventario = {
+    id: uuidv4(), repuesto_id: repuestoId, tipo, cantidad, motivo,
+    usuario_id: usuarioId, created_at: new Date().toISOString()
+  };
+  db.movimientos.push(mov);
+  const idx = db.repuestos.findIndex(r => r.id === repuestoId);
+  if (idx !== -1) {
+    if (tipo === 'entrada' || tipo === 'ajuste') {
+      db.repuestos[idx].stock_actual += cantidad;
+    } else if (tipo === 'salida') {
+      db.repuestos[idx].stock_actual -= cantidad;
+    }
+    if (db.repuestos[idx].stock_actual <= db.repuestos[idx].stock_minimo) {
+      const existeAlerta = db.alertas.find(a => a.repuesto_id === repuestoId && !a.leida);
+      if (!existeAlerta) {
+        db.alertas.push({
+          id: uuidv4(), repuesto_id: repuestoId, tipo: 'stock_bajo',
+          mensaje: `${db.repuestos[idx].nombre} tiene stock bajo (${db.repuestos[idx].stock_actual} ${db.repuestos[idx].unidad})`,
+          leida: false, created_at: new Date().toISOString()
+        });
+      }
+    }
+  }
+  return mov;
+}
+
 export function getMovimientosByRepuesto(repuestoId: string): MovimientoInventario[] {
   return getDB().movimientos.filter(m => m.repuesto_id === repuestoId).sort((a, b) => b.created_at.localeCompare(a.created_at));
 }
@@ -363,15 +391,16 @@ export function actualizarOrdenEstado(id: string, estado: EstadoOrden, usuarioId
   // Si pasa a "listo", descontar stock de repuestos
   if (estado === 'listo') {
     const itemsRepuesto = orden.items.filter(i => i.tipo === 'repuesto' && i.repuesto_id);
+    // Primero verificar que hay stock suficiente para TODOS los items
     for (const item of itemsRepuesto) {
       const repuesto = db.repuestos.find(r => r.id === item.repuesto_id);
       if (!repuesto || repuesto.stock_actual < item.cantidad) {
-        throw new Error(`Stock insuficiente de ${repuesto?.nombre || 'repuesto'}. Disponible: ${repuesto?.stock_actual || 0}`);
+        throw new Error(`Stock insuficiente de ${repuesto?.nombre || 'repuesto'}. Disponible: ${repuesto?.stock_actual || 0}, requerido: ${item.cantidad}`);
       }
     }
-    // Descontar stock
+    // Descontar stock usando la versión interna (misma referencia db)
     for (const item of itemsRepuesto) {
-      registrarMovimiento(item.repuesto_id!, 'salida', item.cantidad, `Orden #${orden.id.slice(0, 6)}`, usuarioId);
+      registrarMovimientoInterno(db, item.repuesto_id!, 'salida', item.cantidad, `Orden #${orden.id.slice(0, 6)}`, usuarioId);
     }
   }
 
