@@ -3,10 +3,9 @@ import { LogOut, Users, Shield, AlertTriangle, Play } from 'lucide-react';
 import { Card, Button, PageHeader, Loader } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
 import { useAuth } from '../store/auth';
-import { getAlertas, marcarAlertaLeida, getUsuarios, resetDatabase } from '../db';
+import { getAlertas, marcarAlertaLeida, getUsuarios } from '../db';
 import { useState } from 'react';
 import { useAsync } from '../hooks/useAsync';
-import { runTests } from '../tests';
 
 export default function Perfil() {
   const { user, logout } = useAuth();
@@ -23,8 +22,10 @@ export default function Perfil() {
   const usuarios = data?.usuarios ?? [];
 
   const handleRunTests = async () => {
+    if (!import.meta.env.DEV) return;
     setSaving(true);
     try {
+      const { runTests } = await import('../tests');
       const results = await runTests();
       setTestResults(results);
       reload();
@@ -41,9 +42,12 @@ export default function Perfil() {
   };
 
   const handleReset = async () => {
+    // Herramienta exclusiva de desarrollo: nunca se ejecuta en producción.
+    if (!import.meta.env.DEV) return;
     if (confirm('¿Restablecer todos los datos? Se perderán todos los cambios.')) {
       setSaving(true);
       try {
+        const { resetDatabase } = await import('../db');
         await resetDatabase();
         logout();
         navigate('/login');
@@ -147,15 +151,18 @@ export default function Perfil() {
 
         {/* Acciones */}
         <div className="space-y-3 pt-4">
-          {user?.rol === 'admin' && (
-            <>
+          {import.meta.env.DEV && user?.rol === 'admin' && (
+            <div className="rounded-2xl border border-dashed border-orange-300 bg-orange-50 p-3 space-y-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-orange-700">
+                Herramientas de desarrollo (no visibles en producción)
+              </p>
               <Button fullWidth variant="secondary" onClick={handleRunTests} loading={saving}>
                 <Play className="w-5 h-5" /> Ejecutar Pruebas del Sistema
               </Button>
               <Button fullWidth variant="ghost" onClick={handleReset} className="text-red-500" loading={saving}>
                 Restablecer datos de ejemplo
               </Button>
-            </>
+            </div>
           )}
           <Button fullWidth variant="secondary" onClick={handleLogout}>
             <LogOut className="w-5 h-5" /> Cerrar Sesión
