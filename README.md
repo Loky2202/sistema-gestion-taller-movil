@@ -83,39 +83,60 @@ La aplicación incluye datos precargados:
 
 ---
 
-## 🚀 Instalación
+## 🚀 Instalación con Docker
 
 ### Requisitos Previos
 
-- Node.js 18+ 
-- npm o yarn
+- Docker 20+
+- Docker Compose 2+
 - Navegador moderno (Chrome, Firefox, Safari, Edge)
 
-### Instalación Rápida
+### Instalación Rápida (Recomendado)
 
 ```bash
-# Clonar repositorio
+# 1. Clonar repositorio
 git clone https://github.com/tu-usuario/tallerpro.git
 cd tallerpro
 
-# Instalar dependencias
+# 2. Copiar archivo de entorno
+cp .env.example .env
+
+# 3. Generar clave secreta segura
+openssl rand -hex 32
+# Copia el resultado y pégalo en .env en SECRET_KEY
+
+# 4. Levantar servicios
+docker compose up -d
+
+# 5. Abrir en navegador
+# Frontend: http://localhost:8000
+# Backend API: http://localhost:8001
+# Swagger Docs: http://localhost:8001/docs
+```
+
+### Desarrollo Local (sin Docker)
+
+```bash
+# Solo frontend
 npm install
-
-# Ejecutar en desarrollo
 npm run dev
-
-# Abrir en navegador
 # http://localhost:3000
 ```
 
-### Build para Producción
+### Comandos Útiles
 
 ```bash
-# Compilar aplicación
-npm run build
+# Ver logs
+docker compose logs -f
 
-# Los archivos estarán en /dist
-# Listos para deploy
+# Detener servicios
+docker compose down
+
+# Reconstruir después de cambios
+docker compose up -d --build
+
+# Backup de base de datos
+cp data/taller.db backups/taller_$(date +%Y%m%d).db
 ```
 
 ---
