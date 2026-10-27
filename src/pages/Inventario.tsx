@@ -1,19 +1,29 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, AlertTriangle } from 'lucide-react';
-import { Card, PageHeader, StockBadge, EmptyState, formatCurrency } from '../components/ui';
+import { Search, AlertTriangle, Plus } from 'lucide-react';
+import { Card, PageHeader, StockBadge, EmptyState, formatCurrency, Button, Input, Select, Modal } from '../components/ui';
 import { BottomNav } from '../components/BottomNav';
-import { getRepuestos, buscarRepuestos } from '../db';
+import { getRepuestos, buscarRepuestos, crearRepuesto } from '../db';
+import { useAuth } from '../store/auth';
 
 export default function Inventario() {
   const navigate = useNavigate();
+  const user = useAuth(s => s.user);
   const [busqueda, setBusqueda] = useState('');
   const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [showNuevo, setShowNuevo] = useState(false);
+  const [, setRefresh] = useState(0);
 
-  const categorias = useMemo(() => {
-    const reps = getRepuestos();
-    return [...new Set(reps.map(r => r.categoria))];
-  }, []);
+  // Formulario nuevo repuesto
+  const [nuevoSku, setNuevoSku] = useState('');
+  const [nuevoNombre, setNuevoNombre] = useState('');
+  const [nuevoCategoria, setNuevoCategoria] = useState('Motor');
+  const [nuevoUnidad, setNuevoUnidad] = useState<'unidad' | 'litro' | 'metro' | 'juego'>('unidad');
+  const [nuevoStock, setNuevoStock] = useState('');
+  const [nuevoStockMin, setNuevoStockMin] = useState('');
+  const [nuevoCosto, setNuevoCosto] = useState('');
+  const [nuevoVenta, setNuevoVenta] = useState('');
+  const [nuevoProveedor, setNuevoProveedor] = useState('');
 
   const repuestos = useMemo(() => {
     let reps = busqueda ? buscarRepuestos(busqueda) : getRepuestos();
@@ -23,9 +33,55 @@ export default function Inventario() {
 
   const stockBajo = repuestos.filter(r => r.stock_actual <= r.stock_minimo);
 
+  const categorias = useMemo(() => {
+    const reps = getRepuestos();
+    const cats = [...new Set(reps.map(r => r.categoria))];
+    // Agregar categorías por defecto si no existen
+    const defaults = ['Motor', 'Frenos', 'Suspensión', 'Eléctrico', 'Llantas', 'Lubricantes'];
+    return [...new Set([...defaults, ...cats])];
+  }, [busqueda]); // eslint-disable-line
+
+  const handleCrearRepuesto = () => {
+    if (!nuevoSku || !nuevoNombre || !nuevoVenta || !nuevoStock) {
+      alert('Complete los campos obligatorios (Código, Nombre, Precio venta, Stock)');
+      return;
+    }
+    const existentes = getRepuestos();
+    if (existentes.find(r => r.sku.toLowerCase() === nuevoSku.toLowerCase())) {
+      alert('Ya existe un repuesto con ese código');
+      return;
+    }
+    crearRepuesto({
+      sku: nuevoSku.toUpperCase(),
+      nombre: nuevoNombre,
+      categoria: nuevoCategoria,
+      unidad: nuevoUnidad,
+      stock_actual: parseFloat(nuevoStock) || 0,
+      stock_minimo: parseFloat(nuevoStockMin) || 0,
+      precio_costo: parseFloat(nuevoCosto) || 0,
+      precio_venta: parseFloat(nuevoVenta) || 0,
+      proveedor: nuevoProveedor,
+      activo: true,
+    });
+    // Reset form
+    setNuevoSku(''); setNuevoNombre(''); setNuevoStock(''); setNuevoStockMin('');
+    setNuevoCosto(''); setNuevoVenta(''); setNuevoProveedor('');
+    setShowNuevo(false);
+    setRefresh(r => r + 1);
+  };
+
   return (
     <div className="pb-20">
-      <PageHeader title="Inventario" />
+      <PageHeader
+        title="Inventario"
+        action={
+          user?.rol === 'admin' ? (
+            <button onClick={() => setShowNuevo(true)} className="p-2 rounded-full bg-blue-100">
+              <Plus className="w-5 h-5 text-blue-600" />
+            </button>
+          ) : undefined
+        }
+      />
 
       <div className="px-4 py-3 space-y-3">
         {/* Buscador */}
@@ -100,6 +156,82 @@ export default function Inventario() {
           </div>
         )}
       </div>
+
+      {/* Modal Nuevo Repuesto */}
+      <Modal isOpen={showNuevo} onClose={() => setShowNuevo(false)} title="Nuevo Repuesto">
+        <div className="space-y-3">
+          <Input
+            label="Código (SKU) *"
+            value={nuevoSku}
+            onChange={e => setNuevoSku(e.target.value)}
+            placeholder="Ej: ACE-002"
+          />
+          <Input
+            label="Nombre *"
+            value={nuevoNombre}
+            onChange={e => setNuevoNombre(e.target.value)}
+            placeholder="Ej: Aceite Motor 5W-30"
+          />
+          <Select
+            label="Categoría"
+            value={nuevoCategoria}
+            onChange={e => setNuevoCategoria(e.target.value)}
+            options={categorias.map(c => ({ value: c, label: c }))}
+          />
+          <Select
+            label="Unidad de medida"
+            value={nuevoUnidad}
+            onChange={e => setNuevoUnidad(e.target.value as 'unidad' | 'litro' | 'metro' | 'juego')}
+            options={[
+              { value: 'unidad', label: 'Unidad' },
+              { value: 'litro', label: 'Litro' },
+              { value: 'metro', label: 'Metro' },
+              { value: 'juego', label: 'Juego' },
+            ]}
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Stock actual *"
+              type="number"
+              value={nuevoStock}
+              onChange={e => setNuevoStock(e.target.value)}
+              placeholder="0"
+            />
+            <Input
+              label="Stock mínimo"
+              type="number"
+              value={nuevoStockMin}
+              onChange={e => setNuevoStockMin(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Precio costo"
+              type="number"
+              value={nuevoCosto}
+              onChange={e => setNuevoCosto(e.target.value)}
+              placeholder="0"
+            />
+            <Input
+              label="Precio venta *"
+              type="number"
+              value={nuevoVenta}
+              onChange={e => setNuevoVenta(e.target.value)}
+              placeholder="0"
+            />
+          </div>
+          <Input
+            label="Proveedor"
+            value={nuevoProveedor}
+            onChange={e => setNuevoProveedor(e.target.value)}
+            placeholder="Nombre del proveedor"
+          />
+          <Button fullWidth onClick={handleCrearRepuesto}>
+            Guardar Repuesto
+          </Button>
+        </div>
+      </Modal>
 
       <BottomNav />
     </div>
