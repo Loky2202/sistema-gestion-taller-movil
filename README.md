@@ -42,6 +42,7 @@
 - ✅ **Sistema de Caja** - Cobros con múltiples métodos de pago
 - ✅ **Dashboard en Tiempo Real** - Métricas clave del negocio
 - ✅ **Roles y Permisos** - Admin y Mecánico con accesos diferenciados
+- ✅ **Administración de Usuarios** - El admin crea, edita, cambia contraseña y activa/desactiva mecánicos
 - ✅ **PWA Instalable** - Funciona como app nativa en móviles
 - ✅ **Datos compartidos por LAN** - Un servidor en el taller; todos los dispositivos ven la misma información
 
@@ -192,12 +193,41 @@ cp data/taller.db backups/taller_$(date +%Y%m%d).db
 5. Confirmar pago
 ```
 
+#### 5. Administrar Usuarios (solo admin)
+
+```
+1. Ir a "Perfil" → "Usuarios del Sistema" → "Administrar"
+2. Tocar "Nuevo" para crear un mecánico
+3. Completar nombre, correo, contraseña (mínimo 6 caracteres) y rol
+4. Para editar: tocar el usuario, cambiar los datos y guardar
+5. Para quitar el acceso sin borrar su historial: ponerlo "Inactivo"
+```
+
+- El admin puede asignar una contraseña nueva a un mecánico; si el campo se deja vacío, se conserva la actual.
+- Un usuario inactivo no puede iniciar sesión, pero sus órdenes e historial se conservan.
+- El admin no puede desactivarse ni quitarse el rol a sí mismo, para evitar dejar el sistema sin administrador.
+- Solo el rol admin puede ver y administrar la lista de usuarios.
+
 ### Atajos y Tips
 
 - 🔍 **Búsqueda rápida** - Usa el buscador en cada pantalla
 - 📱 **Instalar PWA** - Toca "Agregar a pantalla de inicio"
 - 🔔 **Alertas** - Revisa el dashboard para stock crítico
-- 💾 **Backup** - Haz backup regular desde Perfil
+- 💾 **Backup** - Copia periódicamente `data/taller.db` en la PC del taller
+
+### 🛠️ Herramientas de mantenimiento
+
+#### Restablecer datos de ejemplo (destructivo)
+
+El endpoint `POST /api/v1/admin/reset` borra todos los datos y vuelve a cargar los datos de ejemplo. Requiere un token de administrador.
+
+- En la interfaz **no aparece en producción**: el botón "Restablecer datos de ejemplo" solo se muestra en modo desarrollo (`npm run dev`).
+- Si alguna vez se necesita, se puede ejecutar a propósito desde Swagger (`http://IP-DE-LA-PC:8001/docs`) autenticándose como admin.
+- **No debe usarse con datos reales**: elimina clientes, vehículos, órdenes, pagos, movimientos y cierres de caja.
+
+#### Respaldos
+
+El respaldo se hace copiando `data/taller.db` (ver la sección "Comandos Útiles"). La aplicación no incluye un botón de respaldo ni de restauración.
 
 ---
 

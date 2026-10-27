@@ -14,9 +14,10 @@ export default function Perfil() {
   const [testResults, setTestResults] = useState<{ passed: number; failed: number } | null>(null);
 
   const { data, loading, error, reload } = useAsync(async () => {
-    const [alertas, usuarios] = await Promise.all([getAlertas(), getUsuarios()]);
+    const alertas = await getAlertas();
+    const usuarios = user?.rol === 'admin' ? await getUsuarios() : [];
     return { alertas, usuarios };
-  }, []);
+  }, [user?.rol]);
 
   const alertas = (data?.alertas ?? []).filter(a => !a.leida);
   const usuarios = data?.usuarios ?? [];
@@ -117,13 +118,25 @@ export default function Perfil() {
         {/* Admin: Usuarios */}
         {user?.rol === 'admin' && (
           <Card>
-            <div className="flex items-center gap-2 mb-3">
-              <Users className="w-5 h-5 text-blue-500" />
-              <h3 className="font-bold text-gray-900">Usuarios del Sistema</h3>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-blue-500" />
+                <h3 className="font-bold text-gray-900">Usuarios del Sistema</h3>
+              </div>
+              <button
+                onClick={() => navigate('/usuarios')}
+                className="text-sm font-semibold text-blue-600 active:text-blue-800"
+              >
+                Administrar
+              </button>
             </div>
             <div className="space-y-2">
               {usuarios.map(u => (
-                <div key={u.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div
+                  key={u.id}
+                  onClick={() => navigate('/usuarios')}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-xl cursor-pointer active:bg-gray-100"
+                >
                   <div>
                     <p className="font-medium text-gray-900">{u.nombre}</p>
                     <p className="text-xs text-gray-500">{u.email}</p>

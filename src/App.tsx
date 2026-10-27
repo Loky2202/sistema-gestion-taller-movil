@@ -16,6 +16,7 @@ import RepuestoDetalle from './pages/RepuestoDetalle';
 import Clientes from './pages/Clientes';
 import Caja from './pages/Caja';
 import Perfil from './pages/Perfil';
+import Usuarios from './pages/Usuarios';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuth(s => s.isAuthenticated);
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clientes /></AppLayout></ProtectedRoute>} />
           <Route path="/caja" element={<ProtectedRoute><AppLayout><Caja /></AppLayout></ProtectedRoute>} />
           <Route path="/perfil" element={<ProtectedRoute><AppLayout><Perfil /></AppLayout></ProtectedRoute>} />
+          <Route path="/usuarios" element={<ProtectedRoute><AppLayout><Usuarios /></AppLayout></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </ErrorBoundary>

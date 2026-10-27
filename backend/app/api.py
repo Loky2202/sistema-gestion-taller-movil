@@ -417,9 +417,9 @@ def get_me(current_user: User = Depends(get_current_user)):
 @router.get("/usuarios", response_model=List[UserResponse])
 def get_usuarios(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ):
-    """Listar usuarios del sistema."""
+    """Listar usuarios del sistema (solo admin)."""
     return db.query(User).order_by(User.nombre).all()
 
 
@@ -449,6 +449,9 @@ def create_usuario(
     if usuario.rol not in {"admin", "mecanico"}:
         raise HTTPException(status_code=400, detail="Rol inválido")
 
+    if len(usuario.password) < 6:
+        raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
+
     db_usuario = User(
         nombre=usuario.nombre,
         email=usuario.email,
@@ -475,6 +478,11 @@ def update_usuario(
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
     data = cambios.model_dump(exclude_unset=True)
+    if usuario.id == current_user.id:
+        if data.get("activo") is False:
+            raise HTTPException(status_code=400, detail="No puedes desactivar tu propio usuario")
+        if data.get("rol") not in (None, "admin"):
+            raise HTTPException(status_code=400, detail="No puedes quitarte el rol de administrador")
     if "email" in data and data["email"] != usuario.email:
         if db.query(User).filter(User.email == data["email"]).first():
             raise HTTPException(status_code=400, detail="Ya existe un usuario con ese email")
@@ -483,6 +491,8 @@ def update_usuario(
     if "password" in data:
         password = data.pop("password")
         if password:
+            if len(password) < 6:
+                raise HTTPException(status_code=400, detail="La contraseña debe tener al menos 6 caracteres")
             usuario.password_hash = get_password_hash(password)
 
     for campo, valor in data.items():
