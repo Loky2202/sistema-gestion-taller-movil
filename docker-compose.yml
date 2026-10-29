@@ -14,6 +14,8 @@ services:
       - DATABASE_URL=sqlite:///./data/taller.db
       - SECRET_KEY=${SECRET_KEY:-cambiar-esta-clave-secreta-en-produccion}
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8000
+      # Debe ser false en producción: habilita el endpoint destructivo /admin/reset
+      - DEBUG=${DEBUG:-false}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]

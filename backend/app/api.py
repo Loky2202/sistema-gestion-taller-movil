@@ -971,10 +971,14 @@ def update_estado_orden(
     if orden.estado in {"entregado", "cancelado"}:
         raise HTTPException(status_code=400, detail="No se puede modificar una orden finalizada")
 
-    # Si pasa a "listo" por primera vez, descontar stock y registrar movimientos.
-    if estado_update.estado == "listo" and orden.estado != "listo":
-        items_repuesto = [i for i in orden.items if i.tipo == "repuesto" and i.repuesto_id]
+    items_repuesto = [i for i in orden.items if i.tipo == "repuesto" and i.repuesto_id]
 
+    # Invariante: mientras la orden está en "listo", el stock de sus repuestos
+    # está descontado. Se descuenta al ENTRAR a "listo" y se restaura al SALIR
+    # de "listo" (hacia un estado no final). Así, una orden que pasa
+    # recibido -> listo -> en_reparacion -> listo no descuenta el stock dos veces.
+    if estado_update.estado == "listo" and orden.estado != "listo":
+        # Validar primero TODOS los repuestos antes de mutar nada.
         for item in items_repuesto:
             repuesto = db.query(Repuesto).filter(Repuesto.id == item.repuesto_id).first()
             if not repuesto or repuesto.stock_actual < item.cantidad:
@@ -1001,6 +1005,25 @@ def update_estado_orden(
                 )
             )
             _crear_alerta_stock(db, repuesto)
+
+    elif orden.estado == "listo" and estado_update.estado != "entregado":
+        # La orden sale de "listo" hacia un estado no final (reparación,
+        # cancelada, etc.): devolver el stock porque el trabajo NO se completó.
+        # En "entregado" el stock ya se consumió, no se restaura.
+        for item in items_repuesto:
+            repuesto = db.query(Repuesto).filter(Repuesto.id == item.repuesto_id).first()
+            if not repuesto:
+                continue
+            repuesto.stock_actual += item.cantidad
+            db.add(
+                MovimientoInventario(
+                    repuesto_id=repuesto.id,
+                    tipo="entrada",
+                    cantidad=item.cantidad,
+                    motivo=f"Reversión de orden #{orden.id[:6]}",
+                    usuario_id=current_user.id,
+                )
+            )
 
     orden.estado = estado_update.estado
     if estado_update.estado == "entregado":
@@ -1289,7 +1312,13 @@ def reset_database(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ):
-    """Restablecer los datos de ejemplo (solo admin, destructivo)."""
+    """Restablecer los datos de ejemplo (solo admin, destructivo).
+
+    Solo disponible en modo desarrollo (DEBUG=true). En producción responde 404
+    para que no exista ninguna forma de borrar los datos reales desde fuera.
+    """
+    if not settings.DEBUG:
+        raise HTTPException(status_code=404, detail="No encontrado")
     for model in [
         Pago,
         OrdenItem,

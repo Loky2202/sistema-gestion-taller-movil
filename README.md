@@ -219,7 +219,7 @@ cp data/taller.db backups/taller_$(date +%Y%m%d).db
 
 #### Restablecer datos de ejemplo (destructivo)
 
-El endpoint `POST /api/v1/admin/reset` borra todos los datos y vuelve a cargar los datos de ejemplo. Requiere un token de administrador.
+El endpoint `POST /api/v1/admin/reset` borra todos los datos y vuelve a cargar los datos de ejemplo. Requiere un token de administrador **y que el backend esté en modo desarrollo (`DEBUG=true`)**: en producción responde 404.
 
 - En la interfaz **no aparece en producción**: el botón "Restablecer datos de ejemplo" solo se muestra en modo desarrollo (`npm run dev`).
 - Si alguna vez se necesita, se puede ejecutar a propósito desde Swagger (`http://IP-DE-LA-PC:8001/docs`) autenticándose como admin.
